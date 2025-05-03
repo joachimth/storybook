@@ -1,0 +1,10 @@
+openai_api_key: ${{ secrets.OPENAI_KEY }}
+default_barnets_navn: ${{ secrets.DEFAULT_NAME }}
+default_barnets_alder: 3
+default_pages: 14
+model: "gpt-4"
+image_size_px: 1772
+dpi: 300
+pdf_size_mm: 150
+font_path: "assets/fonts/DejaVuSans.ttf"
+output_folder: "output"
