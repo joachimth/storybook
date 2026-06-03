@@ -29,3 +29,14 @@ def load_config():
 
 
 CONFIG = load_config()
+
+_openai_client = None
+
+
+def get_openai_client():
+    """Lazy OpenAI client - only instantiated on first actual API call."""
+    global _openai_client
+    if _openai_client is None:
+        import openai
+        _openai_client = openai.OpenAI(api_key=CONFIG["openai_api_key"])
+    return _openai_client

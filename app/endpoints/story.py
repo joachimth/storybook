@@ -1,12 +1,10 @@
 from fastapi import APIRouter
 from app.models import StorySelection, BookData, Page
-from app.config import CONFIG
-import openai
+from app.config import CONFIG, get_openai_client
 import os
 import json
 
 router = APIRouter()
-client = openai.OpenAI(api_key=CONFIG["openai_api_key"])
 
 
 @router.post("/")
@@ -28,7 +26,7 @@ Returnér resultatet som en JSON-liste med tekststrenge, én pr. side. Eks: ["Si
 """
 
     try:
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model=CONFIG["model"],
             messages=[
                 {"role": "system", "content": "Du er en kreativ børnebogsforfatter."},
