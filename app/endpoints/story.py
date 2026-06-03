@@ -10,11 +10,12 @@ client = openai.OpenAI(api_key=CONFIG["openai_api_key"])
 
 @router.post("/")
 def generate_full_story(data: StorySelection):
-    first_name = data.navn.strip().split()[0]
-    full_name = data.navn.strip()
-    antal_sider = CONFIG["default_pages"]
+      try:
+            first_name = data.navn.strip().split()[0]
+            full_name = data.navn.strip()
+            antal_sider = CONFIG["default_pages"]
 
-    story_prompt = f"""Du skal skrive en komplet børnebog med {antal_sider} sider til en {data.alder}-årig pige.
+            story_prompt = f"""Du skal skrive en komplet børnebog med {antal_sider} sider til en {data.alder}-årig pige.
 
 Titel: {data.valgt_titel}
 Hovedperson: {first_name}
@@ -26,14 +27,16 @@ Brug kun navnet {first_name} i teksten – aldrig hele navnet.
 Returnér resultatet som en liste med tekst til hver side. Hvert element i listen skal være en streng med teksten til en side.
 """
 
-    response = client.chat.completions.create(
-        model=CONFIG["model"],
-        messages=[
-            {"role": "system", "content": "Du er en kreativ børnebogsforfatter."},
-            {"role": "user", "content": story_prompt}
-        ],
-        temperature=0.7
-    )
+            response = client.chat.completions.create(
+                model=CONFIG["model"],
+                messages=[
+                    {"role": "system", "content": "Du er en kreativ børnebogsforfatter."},
+                    {"role": "user", "content": story_prompt}
+                ],
+                temperature=0.7
+            )
+      except Exception as e:
+            return {"error": f"Fejl ved generering af historie: {str(e)}"}
 
     raw = response.choices[0].message.content
     try:
@@ -76,6 +79,6 @@ Returnér resultatet som en liste med tekst til hver side. Hvert element i liste
     os.makedirs(CONFIG["output_folder"], exist_ok=True)
     json_path = os.path.join(CONFIG["output_folder"], "book_data.json")
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(book.dict(), f, ensure_ascii=False, indent=2)
+        json.dump(book.model_dump(), f, ensure_ascii=False, indent=2)
 
     return {"message": "Historie genereret og gemt", "json_path": json_path}

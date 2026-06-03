@@ -8,10 +8,11 @@ client = openai.OpenAI(api_key=CONFIG["openai_api_key"])
 
 @router.post("/")
 def generate_suggestions(data: SuggestionInput):
-    navn = data.navn or CONFIG["default_barnets_navn"]
-    alder = data.alder or CONFIG["default_barnets_alder"]
+      try:
+            navn = data.navn or CONFIG["default_barnets_navn"]
+            alder = data.alder or CONFIG["default_barnets_alder"]
 
-    prompt = f"""Lav tre forskellige forslag til korte, søde børnebøger til en {alder}-årig pige ved navn {navn}.
+            prompt = f"""Lav tre forskellige forslag til korte, søde børnebøger til en {alder}-årig pige ved navn {navn}.
 
 Hver historie skal have:
 - En bogtitel (maks 5 ord)
@@ -29,13 +30,15 @@ Skriv som en liste:
    Handling: ...
 """
 
-    chat_response = client.chat.completions.create(
-        model=CONFIG["model"],
-        messages=[
-            {"role": "system", "content": "Du er en kreativ børnebogsforfatter."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.8
-    )
+            chat_response = client.chat.completions.create(
+                model=CONFIG["model"],
+                messages=[
+                    {"role": "system", "content": "Du er en kreativ børnebogsforfatter."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.8
+            )
 
-    return {"suggestions": chat_response.choices[0].message.content}
+            return {"suggestions": chat_response.choices[0].message.content}
+      except Exception as e:
+            return {"error": f"Fejl ved generering af forslag: {str(e)}"}
