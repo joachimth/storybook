@@ -5,4 +5,5 @@ python-multipart
 pillow
 fpdf2
 pyyaml
-opencv-python
+opencv-python-headless
+python-dotenv

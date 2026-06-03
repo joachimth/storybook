@@ -127,13 +127,21 @@ class StorybookApp:
             self.status_var.set("Fejl ved hentning.")
 
     def extract_forslag(self, raw_text):
+        """Parse GPT suggestions into (titel, handling) pairs.
+
+        Uses regex so GPT line-spacing variations (blank lines or not) don't break parsing.
+        """
+        import re
         forslag = []
-        lines = raw_text.strip().splitlines()
-        for i in range(0, len(lines), 3):
-            if i + 1 < len(lines):
-                titel = lines[i].split(":", 1)[-1].strip()
-                handling = lines[i + 1].split(":", 1)[-1].strip()
-                forslag.append((titel, handling))
+        # Match "Titel: ..." followed by "Handling: ..." on the next non-empty line
+        pattern = re.compile(
+            r"[Tt]itel\s*:\s*(.+?)\s*\n\s*[Hh]andling\s*:\s*(.+)",
+            re.MULTILINE,
+        )
+        for m in pattern.finditer(raw_text):
+            titel = m.group(1).strip()
+            handling = m.group(2).strip()
+            forslag.append((titel, handling))
         return forslag
 
     def generer_historie(self):
@@ -166,7 +174,8 @@ class StorybookApp:
     def generer_billeder(self):
         try:
             self.status_var.set("Billeder genereres, vent venligst...")
-            r = requests.post(f"{BASE_URL}/generate_images")
+            # Generous timeout: 14 DALL-E calls can take several minutes
+            r = requests.post(f"{BASE_URL}/generate_images", timeout=(30, 900))
             r.raise_for_status()
             self.status_var.set("Billeder genereret.")
             self.vis_billeder()
@@ -176,7 +185,7 @@ class StorybookApp:
 
     def generer_pdf(self):
         try:
-            r = requests.post(f"{BASE_URL}/export_pdf")
+            r = requests.post(f"{BASE_URL}/export_pdf", timeout=(30, 120))
             r.raise_for_status()
             path = r.json().get("pdf_path", "")
             self.status_var.set(f"PDF genereret: {path}")
@@ -205,7 +214,7 @@ class StorybookApp:
             return
 
         for filename in sorted(os.listdir(IMG_DIR)):
-            if filename.endswith(".png"):
+            if filename.endswith(".png") and not filename.endswith("_text.png"):
                 path = os.path.join(IMG_DIR, filename)
                 try:
                     img = Image.open(path)

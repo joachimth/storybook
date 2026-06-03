@@ -8,14 +8,14 @@ import json
 router = APIRouter()
 client = openai.OpenAI(api_key=CONFIG["openai_api_key"])
 
+
 @router.post("/")
 def generate_full_story(data: StorySelection):
-      try:
-            first_name = data.navn.strip().split()[0]
-            full_name = data.navn.strip()
-            antal_sider = CONFIG["default_pages"]
+    first_name = data.navn.strip().split()[0]
+    full_name = data.navn.strip()
+    antal_sider = CONFIG["default_pages"]
 
-            story_prompt = f"""Du skal skrive en komplet børnebog med {antal_sider} sider til en {data.alder}-årig pige.
+    story_prompt = f"""Du skal skrive en komplet børnebog med {antal_sider} sider til en {data.alder}-årig pige.
 
 Titel: {data.valgt_titel}
 Hovedperson: {first_name}
@@ -24,48 +24,49 @@ Beskrivelse: {data.valgt_handling}
 Skriv én kort, enkel og kærlig sætning pr. side – én for hver af de {antal_sider} sider.
 Historien skal være rolig, fantasifuld og ende trygt.
 Brug kun navnet {first_name} i teksten – aldrig hele navnet.
-Returnér resultatet som en liste med tekst til hver side. Hvert element i listen skal være en streng med teksten til en side.
+Returnér resultatet som en JSON-liste med tekststrenge, én pr. side. Eks: ["Side 1 tekst", "Side 2 tekst", ...]
 """
 
-            response = client.chat.completions.create(
-                model=CONFIG["model"],
-                messages=[
-                    {"role": "system", "content": "Du er en kreativ børnebogsforfatter."},
-                    {"role": "user", "content": story_prompt}
-                ],
-                temperature=0.7
-            )
-      except Exception as e:
-            return {"error": f"Fejl ved generering af historie: {str(e)}"}
+    try:
+        response = client.chat.completions.create(
+            model=CONFIG["model"],
+            messages=[
+                {"role": "system", "content": "Du er en kreativ børnebogsforfatter."},
+                {"role": "user", "content": story_prompt},
+            ],
+            temperature=0.7,
+        )
+    except Exception as e:
+        return {"error": f"OpenAI-kald fejlede: {e}"}
 
     raw = response.choices[0].message.content
+
+    # Strip markdown code fences if GPT wraps the JSON
+    stripped = raw.strip()
+    if stripped.startswith("```"):
+        stripped = "\n".join(stripped.split("\n")[1:])
+        stripped = stripped.rstrip("`").strip()
+
+    pages: list[Page] = []
     try:
-        # Forsøg at parse JSON - kan være en liste af strenge eller en liste af objekter
-        pages_text = json.loads(raw)
-        
-        # Håndter forskellige JSON-formater
-        pages = []
+        pages_text = json.loads(stripped)
         for item in pages_text:
             if isinstance(item, str):
-                # Hvis det er en streng, brug den direkte
                 pages.append(Page(text=item.strip()))
             elif isinstance(item, dict) and "text" in item:
-                # Hvis det er et dictionary med 'text' key
                 pages.append(Page(text=item["text"].strip()))
             elif isinstance(item, dict):
-                # Hvis det er et dictionary uden 'text' key, tag første værdi
                 first_value = next(iter(item.values()), "")
-                if isinstance(first_value, str):
-                    pages.append(Page(text=first_value.strip()))
-                else:
-                    pages.append(Page(text=str(first_value)))
+                pages.append(Page(text=str(first_value).strip()))
             else:
-                # Fallback
-                pages.append(Page(text=str(item)))
+                pages.append(Page(text=str(item).strip()))
     except json.JSONDecodeError:
-        # Hvis det ikke er JSON, behandl det som tekst
+        # Fallback: treat numbered lines as pages
         lines = [line.strip() for line in raw.strip().split("\n") if line.strip()]
         pages = [Page(text=line.split(". ", 1)[-1].strip()) for line in lines]
+
+    if not pages:
+        return {"error": "Ingen sider kunne parses fra GPT-svaret."}
 
     book = BookData(
         title=data.valgt_titel,
@@ -73,12 +74,15 @@ Returnér resultatet som en liste med tekst til hver side. Hvert element i liste
         full_name=full_name,
         age=data.alder,
         pages=pages,
-        dedication=f"Made with love for {full_name}"
+        dedication=f"Made with love for {full_name}",
     )
 
     os.makedirs(CONFIG["output_folder"], exist_ok=True)
     json_path = os.path.join(CONFIG["output_folder"], "book_data.json")
+
+    # Pydantic v1/v2 compat
+    book_data = book.model_dump() if hasattr(book, "model_dump") else book.dict()
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(book.model_dump(), f, ensure_ascii=False, indent=2)
+        json.dump(book_data, f, ensure_ascii=False, indent=2)
 
     return {"message": "Historie genereret og gemt", "json_path": json_path}

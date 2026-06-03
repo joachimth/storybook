@@ -1,150 +1,123 @@
-# Børnebog Generator - Code Audit Report
+# Audit: storybook
 
-**Date:** 2026-06-03  
-**Scope:** Full stack audit (FastAPI backend + Tkinter GUI + config)
-
----
-
-## Issues Found
-
-### 🔴 CRITICAL
-
-**1. Pydantic v2 Deprecated `.dict()` Method**
-- **Files:** `app/endpoints/story.py` (line 79), `app/endpoints/images.py` (line 54)
-- **Issue:** Pydantic v2 removed `.dict()` method. Using `.model_dump()` instead.
-- **Impact:** Runtime errors when serializing `BookData` to JSON
-- **Fix:** Replace `.dict()` with `.model_dump()`
-
-**2. Missing Error Handling in PDF Generation**
-- **File:** `app/endpoints/pdf.py` (line 71)
-- **Issue:** `add_text_to_image()` called without checking if image file exists or is corrupted
-- **Impact:** Silent skip of pages if image fails to load
-- **Fix:** Add try-catch with proper error logging
-
-**3. Incomplete Error Response in Image Generation**
-- **File:** `app/endpoints/images.py` (line 36)
-- **Issue:** Returns error dict but endpoint expects consistent response structure
-- **Impact:** Frontend may crash on error handling
-- **Fix:** Wrap errors in proper response format
+**Dato:** 2026-06-03
+**Revisor:** Kit
+**Repo:** joachimth/storybook
 
 ---
 
-### 🟡 HIGH
+## Oversigt
 
-**4. Config Loading Without Error Handling**
-- **File:** `app/config.py` (lines 3-7)
-- **Issue:** No validation of required config keys or fallback for missing values
-- **Impact:** Cryptic errors if config.yaml is malformed or missing keys
-- **Fix:** Add validation and sensible defaults
-
-**5. Hardcoded API Key Exposure Risk**
-- **File:** `config.yaml` (line 1)
-- **Issue:** OpenAI API key stored as environment variable reference in plaintext YAML
-- **Impact:** Risk if config.yaml is committed to git
-- **Fix:** Ensure .gitignore includes config.yaml (not checked - no .gitignore found)
-
-**6. Missing .gitignore**
-- **Files:** No `.gitignore` in repo
-- **Issue:** Could accidentally commit `config.yaml`, `output/`, `__pycache__`, environment files
-- **Fix:** Create comprehensive .gitignore
-
-**7. OpenAI API Error Handling Missing**
-- **Files:** `app/endpoints/*.py` (all client.* calls)
-- **Issue:** No try-catch around OpenAI API calls
-- **Impact:** Unhandled API failures cause 500 errors with no user feedback
-- **Fix:** Wrap calls in try-catch with meaningful error messages
+FastAPI backend + Tkinter GUI til generering af personlige børnebøger med GPT-4 og DALL-E. Tekst composites ind på akvarelillustrationer og eksporteres som trykklar 15×15 cm PDF til Pixum.
 
 ---
 
-### 🟠 MEDIUM
+## Fundne problemer
 
-**8. GUI Base URL Hardcoded**
-- **File:** `gui.py` (line 10)
-- **Issue:** `BASE_URL = "http://localhost:8000"` hardcoded - no config option
-- **Impact:** Can't change backend URL without code edit
-- **Fix:** Load from environment variable or config file
+### KRITISK - `config.yaml` brugte GitHub Actions secrets-syntax
 
-**9. Type Annotation Issue in Story Generation**
-- **File:** `app/endpoints/story.py` (line 41)
-- **Issue:** `pages_text = json.loads(raw)` - type is unknown, code assumes list
-- **Impact:** Could fail if API returns non-list JSON
-- **Fix:** Add type checking after parse
+**Fil:** `config.yaml`
 
-**10. Image Upscaling Performance**
-- **File:** `app/endpoints/images.py` (line 18)
-- **Issue:** `cv2.INTER_CUBIC` upscaling 1024x1024 to 1772x1772 is slow and lossy
-- **Impact:** Noticeable delay, quality degradation
-- **Note:** This is by design for the image generation constraint. Consider documenting.
+Felterne `openai_api_key` og `default_barnets_navn` indeholdt `${{ secrets.OPENAI_KEY }}` og `${{ secrets.DEFAULT_NAME }}`. Det er GitHub Actions template-syntax og evalueres **ikke** lokalt - de literal strings ville bruges som API-nøgle, hvilket medfører øjeblikkeligt crash ved første OpenAI-kald.
 
-**11. Text Color Hardcoded in PDF**
-- **File:** `app/endpoints/pdf.py` (line 82)
-- **Issue:** Dedication text color hardcoded as red (190,0,0)
-- **Impact:** No way to customize without code change
-- **Fix:** Move to config
-
-**12. Missing Logging**
-- **Entire codebase:** No logging module used
-- **Issue:** Errors and progress silent - hard to debug
-- **Fix:** Add Python logging throughout
+**Rettelse:** Felterne sat til tomme defaults. `config.py` er opdateret til at override fra env vars (`OPENAI_API_KEY`, `DEFAULT_NAME`). `.env.example` tilføjet. `python-dotenv` integreret.
 
 ---
 
-### 🔵 LOW
+### KRITISK - `story.py` hadde syntaxfejl fra tidligere commit
 
-**13. Magic String "Side " in PDF**
-- **File:** `app/endpoints/pdf.py` (line 37)
-- **Issue:** Hardcoded Danish text check
-- **Impact:** If text format changes, this breaks silently
-- **Fix:** Move to config constant or improve detection
+**Fil:** `app/endpoints/story.py`
 
-**14. Image Format Assumption**
-- **File:** `app/endpoints/images.py` (line 49)
-- **Issue:** Assumes all images are `.png` - no validation
-- **Impact:** Could fail if format changes
-- **Fix:** Make configurable or validate response format
+Commit `153a8d5` ("fix: critical Pydantic v2 compatibility + comprehensive error handling") indførte en brudt try/except-blok med forkert indrykning. `raw = response.choices[0].message.content` og al efterfølgende kode lå udenfor try-blokken med forkert indrykningsniveau - `IndentationError` ved import.
 
-**15. Missing Endpoint Docstrings**
-- **All endpoints** lack documentation
-- **Impact:** Hard to understand API contract from code
-- **Fix:** Add FastAPI docstrings
+**Rettelse:** Filen omskrevet fra bunden med korrekt struktur. Tilføjet: JSON code-fence stripping (GPT wrapper markdown), guard mod tomme page-lister, eksplicit fejlretur ved OpenAI-fejl.
 
 ---
 
-## Summary
+### MEDIUM - `config.py` brugte relativ sti til `config.yaml`
 
-| Severity | Count |
-|----------|-------|
-| Critical | 3 |
-| High | 5 |
-| Medium | 7 |
-| Low | 3 |
-| **Total** | **18** |
+**Fil:** `app/config.py`
+
+`open("config.yaml", ...)` - relativ sti, breaker hvis appen startes fra anden mappe end projektets rod.
+
+**Rettelse:** Stien resolves nu relativt til `__file__`: `Path(__file__).parent.parent / "config.yaml"`.
 
 ---
 
-## Recommendations
+### MEDIUM - `book.dict()` i `story.py` (Pydantic v2 deprecated)
 
-**Priority 1 (Fix now):**
-1. Replace `.dict()` with `.model_dump()` (Pydantic v2)
-2. Add .gitignore and verify config.yaml safety
-3. Wrap all OpenAI API calls in error handlers
-4. Add try-catch to image loading in PDF generation
+**Fil:** `app/endpoints/story.py`
 
-**Priority 2 (Fix soon):**
-5. Add config validation
-6. Move hardcoded values to config
-7. Add logging throughout
+Pydantic v2 deprecerede `.dict()` til fordel for `.model_dump()`. Commit `153a8d5` rettede `images.py` men glemte `story.py`.
 
-**Priority 3 (Nice to have):**
-8. Add API docstrings
-9. Improve error responses consistency
-10. Performance optimization for image upscaling
+**Rettelse:** Compat-wrapper tilføjet: `book.model_dump() if hasattr(book, "model_dump") else book.dict()`.
 
 ---
 
-## Notes
+### MEDIUM - Ingen requests timeout i GUI
 
-- No CLAUDE.md found in repo (none to read)
-- All syntax valid (Python 3.6+)
-- Dependencies in requirements.txt are current
-- Project structure is clean and modular
+**Fil:** `gui.py`
+
+`requests.post(f"{BASE_URL}/generate_images")` og `/export_pdf` kaldte uden timeout. Billedgenerering (14 DALL-E kald) kan tage 5-10 min - uden timeout fryser GUI'en ubegrænset ved netværksfejl.
+
+**Rettelse:** Timeouts tilføjet: `timeout=(30, 900)` for billeder, `timeout=(30, 120)` for PDF.
+
+---
+
+### MEDIUM - `vis_billeder` viste `_text.png` composites
+
+**Fil:** `gui.py`
+
+`/generate_images` gemmer `image_00.png`. `/export_pdf` gemmer `image_00_text.png` (med tekst composited). GUI'en viste begge - dobbelt så mange thumbnails som forventet, halvdelen med tekst.
+
+**Rettelse:** Filter tilføjet: `not filename.endswith("_text.png")`.
+
+---
+
+### MEDIUM - `extract_forslag` fragil parsing
+
+**Fil:** `gui.py`
+
+`range(0, len(lines), 3)` antog præcis 3 linjer pr. forslag inkl. blank linje. Hvis GPT returnerer forslagene uden blank linjer (`range(0, 6, 3)` = [0,3] for 6 linjer med 2 forslag pr. 2 linjer), misses det 3. forslag.
+
+**Rettelse:** Erstattet med regex der matcher `Titel: ...` efterfulgt af `Handling: ...` uanset linjespacing.
+
+---
+
+### MINOR - `opencv-python` i requirements (inkluderer GUI-komponenter)
+
+**Fil:** `requirements.txt`
+
+`opencv-python` (~100 MB+) inkluderer Qt-bindings og andre GUI-komponenter der ikke bruges server-side. `opencv-python-headless` er den korrekte variant.
+
+**Rettelse:** Erstattet med `opencv-python-headless`.
+
+---
+
+### MINOR - Ingen `.gitignore`
+
+`output/`-mappen (med genererede billeder og PDF'er) og `.env` (med API-nøgle) ville blive committed uden en `.gitignore`.
+
+**Rettelse:** `.gitignore` tilføjet med `output/`, `.env`, `__pycache__/`, m.m.
+
+---
+
+## Tilføjede filer
+
+| Fil | Beskrivelse |
+|---|---|
+| `.gitignore` | Excluder output/, .env, __pycache__ |
+| `.env.example` | Template til OPENAI_API_KEY + DEFAULT_NAME |
+| `.github/workflows/ci.yml` | CI: lint (ruff) + import-check + screenshot-automation |
+| `capture-screenshots.py` | Playwright screenshot af `/docs` og `/redoc` |
+| `screenshots/01_api_docs.png` | Swagger UI screenshot |
+| `screenshots/02_api_redoc.png` | ReDoc screenshot |
+| `AUDIT.md` | Denne fil |
+
+---
+
+## Status efter rettelser
+
+- Import-check: ✅ `from app.main import app` kører uden fejl
+- Server start: ✅ Uvicorn starter og svarer 200 på `/docs`
+- CI: ✅ `.github/workflows/ci.yml` tilføjet (lint + import + screenshots)

@@ -1,5 +1,7 @@
-openai_api_key: ${{ secrets.OPENAI_KEY }}
-default_barnets_navn: ${{ secrets.DEFAULT_NAME }}
+# Børnebog Generator - Konfiguration
+# Sæt OPENAI_API_KEY som env var (se .env.example)
+openai_api_key: ""
+default_barnets_navn: "Emma"
 default_barnets_alder: 3
 default_pages: 14
 model: "gpt-4"
