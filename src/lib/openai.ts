@@ -80,7 +80,7 @@ export async function buildStoryBible(titel: string, sider: string[]): Promise<S
 ${sider.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 
 Build a visual bible that an illustrator can follow so EVERY page looks consistent:
-- characters: a list with EVERY recurring character in the story (the main child first, then everyone/anything that appears on more than one page: friends, siblings, animals, dragons, toys...). For each: 1-2 sentences with the exact physical look (age, hair color and style, skin, clothes, shoes, accessories, and for creatures: color, size, friendly/scary look). Each must be identical on every page they appear.
+- characters: a plain JSON array of STRINGS (never objects, never nested structures). One string per recurring character, with EVERY recurring character in the story (the main child first, then everyone/anything that appears on more than one page: friends, siblings, animals, dragons, toys...). Each string: 1-2 sentences with the exact physical look (age, hair color and style, skin, clothes, shoes, accessories, and for creatures: color, size, friendly/scary look). Each must be identical on every page they appear.
 - world: the recurring setting(s) and the key props/objects that appear more than once, described so they keep the same shape and color every time.
 - palette: 5-6 specific colors (names) used throughout the entire book.
 
@@ -91,7 +91,20 @@ JSON format: {"characters":["...","..."],"world":"...","palette":"..."}`,
   if (!Array.isArray(bible.characters) || bible.characters.length === 0 || !bible.world || !bible.palette) {
     throw new Error("Ufuldstændig billedbibel i svaret");
   }
-  return { ...bible, characters: bible.characters.map((c) => String(c).trim()) };
+  // Modellen kan af og til levere objekter (fx {"name":…,"description":…}) — normalisér alt til strenge.
+  const asText = (c: unknown): string => {
+    if (typeof c === "string") return c.trim();
+    if (c && typeof c === "object") {
+      return Object.values(c as Record<string, unknown>)
+        .map((v) => (typeof v === "string" ? v.trim() : ""))
+        .filter(Boolean)
+        .join(". ");
+    }
+    return "";
+  };
+  const characters = bible.characters.map(asText).filter(Boolean);
+  if (characters.length === 0) throw new Error("Billedbiblen indeholder ingen brugbare karakterer");
+  return { ...bible, characters };
 }
 
 /** ------------------ Billedgenerering ------------------ */
