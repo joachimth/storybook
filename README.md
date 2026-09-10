@@ -49,8 +49,7 @@ python-app/     # den oprindelige FastAPI+Tkinter-app (legacy, vedligeholdes ikk
 - **v2.0 (sep 2026):** web-app på GitHub Pages, JavaScript/Preact. Python-app
   (GPT-4 + DALL-E + Tkinter, juni 2026) er flyttet til `python-app/` som
   legacy-reference — se `python-app/AUDIT.md`.
-- Kendt issue i *Prinsesse Sophie*: opslag 5 efterlader "den lille røde prik"
-  uforklaret (teksten er malet ind i billederne af billedmodellen, så den
-  siden kræver et nyt billede med gpt-image-1 + references fra opslag 3-4).
-  `python-app/tools/finish_sophie_book.py` klarer generering + samling af den
-  endelige PDF når OpenAI-kontoen har credits.
+- Plot-hullet i *Prinsesse Sophie* ("den lille røde prik") er lukket 10. sep
+  2026: opslag 5 er nygenereret med gpt-image-1 ud fra opslag 3-4 som
+  referencer — prikken var en babydrage, der havde mistet sin mor.
+  `python-app/tools/finish_sophie_book.py` reproducerer generering + PDF-samling.

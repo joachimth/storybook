@@ -5,7 +5,6 @@
   "childAge": 5,
   "dedication": "made with love for Sophie Thirsbro",
   "builtin": true,
-  "note": "Teksten er malet ind i billederne af billedmodellen. Opslag 5 er p.t. kendt med et plottområde (den røde prik bliver ikke forklaret) - udskiftning er på vej.",
   "pages": [
     {
       "layout": "spread",
@@ -30,7 +29,7 @@
     {
       "layout": "spread",
       "src": "spread5.jpg",
-      "texts": ["De legede med en mariehøne.", "Til sidst vinkede Sophie farvel."]
+      "texts": ["Den røde prik var en lille babydrage, der havde mistet sin mor.", "Sophie og dragen fulgte babydragen hjem, og så vinkede de farvel."]
     },
     {
       "layout": "spread",
