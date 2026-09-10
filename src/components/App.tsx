@@ -13,6 +13,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [readerBook, setReaderBook] = useState<Book | null>(null);
+  const [editBook, setEditBook] = useState<Book | null>(null);
 
   const refresh = () => {
     setLoading(true);
@@ -44,10 +45,17 @@ export function App() {
           loading={loading}
           error={error}
           onRead={(b) => setReaderBook(b)}
-          onNew={() => setTab("new")}
+          onNew={() => { setEditBook(null); setTab("new"); }}
+          onEdit={(b) => { setEditBook(b); setTab("new"); }}
         />
       )}
-      {tab === "new" && <NewBook onSaved={() => { refresh(); setTab("library"); }} />}
+      {tab === "new" && (
+        <NewBook
+          key={editBook ? `edit-${editBook.id}` : "new"}
+          editing={editBook ?? undefined}
+          onSaved={() => { refresh(); setEditBook(null); setTab("library"); }}
+        />
+      )}
 
       <nav class="bottomnav">
         <button class={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>

@@ -18,8 +18,8 @@ export interface Book {
   dedication?: string;
   builtin?: boolean;
   note?: string;
-  /** Fast billedbibel så alle illustrationer matcher (person, verden, palette). */
-  bible?: { character: string; world: string; palette: string };
+  /** Fast billedbibel så alle illustrationer matcher: ALLE gennemgående karakterer, verden og palette. */
+  bible?: { characters: string[]; world: string; palette: string };
   /** idb-nøgle til personreference-arket ("idb:<key>"). */
   sheetSrc?: string;
   pages: BookPage[];
@@ -29,4 +29,14 @@ export interface Book {
 export interface StorySuggestion {
   titel: string;
   handling: string;
+}
+
+/** Gemt rollebesætning til genbrug på tværs af bøger. */
+export interface SavedCast {
+  id: string;
+  name: string;
+  bible: { characters: string[]; world: string; palette: string };
+  /** idb-nøgle til cast-arket ("idb:cast:<id>:sheet"). */
+  sheetSrc?: string;
+  createdAt: string;
 }

@@ -1,19 +1,21 @@
-import type { Book, BookPage } from "../types";
+import type { Book, BookPage, SavedCast } from "../types";
 
 const DB_NAME = "storybook-v1";
 const BOOKS = "books";
 const IMAGES = "images";
+const CASTS = "casts";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(BOOKS)) db.createObjectStore(BOOKS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(IMAGES)) db.createObjectStore(IMAGES);
+      if (!db.objectStoreNames.contains(CASTS)) db.createObjectStore(CASTS, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -56,6 +58,18 @@ export function imageKey(bookId: string, pageIndex: number): string {
   return `${bookId}:${pageIndex}`;
 }
 
+/** Sletter alle billeder (inkl. cast-ark) for en bog — bruges før der gemmes en redigeret udgave. */
+export async function clearBookImages(bookId: string): Promise<void> {
+  const db = await openDb();
+  const store = db.transaction(IMAGES, "readwrite").objectStore(IMAGES);
+  const keys = await reqAsPromise(store.getAllKeys() as IDBRequest<IDBValidKey[]>);
+  await Promise.all(
+    keys
+      .filter((k) => String(k).startsWith(`${bookId}:`))
+      .map((k) => reqAsPromise(store.delete(k)))
+  );
+}
+
 export async function putImage(key: string, blob: Blob): Promise<void> {
   const db = await openDb();
   await reqAsPromise(db.transaction(IMAGES, "readwrite").objectStore(IMAGES).put(blob, key));
@@ -64,6 +78,32 @@ export async function putImage(key: string, blob: Blob): Promise<void> {
 export async function getImage(key: string): Promise<Blob | undefined> {
   const db = await openDb();
   return reqAsPromise(db.transaction(IMAGES).objectStore(IMAGES).get(key) as IDBRequest<Blob | undefined>);
+}
+
+/** ------------------ Gemte rollebesætninger (genbrug på tværs af bøger) ------------------ */
+
+export function castSheetKey(castId: string): string {
+  return `cast:${castId}:sheet`;
+}
+
+export async function listCasts(): Promise<SavedCast[]> {
+  const db = await openDb();
+  const all = await reqAsPromise(db.transaction(CASTS).objectStore(CASTS).getAll() as IDBRequest<SavedCast[]>);
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function saveCastRecord(cast: SavedCast, sheet?: Blob): Promise<void> {
+  const db = await openDb();
+  await reqAsPromise(db.transaction(CASTS, "readwrite").objectStore(CASTS).put(cast));
+  if (sheet) {
+    await reqAsPromise(db.transaction(IMAGES, "readwrite").objectStore(IMAGES).put(sheet, castSheetKey(cast.id)));
+  }
+}
+
+export async function deleteCast(cast: SavedCast): Promise<void> {
+  const db = await openDb();
+  await reqAsPromise(db.transaction(CASTS, "readwrite").objectStore(CASTS).delete(cast.id));
+  await reqAsPromise(db.transaction(IMAGES, "readwrite").objectStore(IMAGES).delete(castSheetKey(cast.id)));
 }
 
 /** Indlæser en bog der er bundlet med app'en (public/books/<id>/book.json). */

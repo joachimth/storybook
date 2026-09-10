@@ -16,13 +16,24 @@ trykklar 15×15 cm PDF (Pixum softcover-format), direkte fra browseren.
 - **Ny bog** — indtast navn + alder, få 3 AI-forslag eller skriv selv,
   redigér hver sætning, og lad gpt-image-1 illustrere én side ad gangen eller
   hele bogen. Billederne kan tegnes igen enkeltvis.
-- **Billedkonsistens (v2.1)** — pr. bog bygges en *billedbibel* (hovedperson,
-  verden og fast palette) og et *personreference-ark*. Alle sidebilleder
-  genereres via gpt-image-1 edits med personarket som reference, så person,
-  baggrund, rekvisitter og farver er ens hele bogen igennem. Teksten placeres
-  altid i samme reserverede bånd i nederste sjettedel af siden (prompten
-  holder området roligt, PDF'en tegner båndet) — så placering og stavning er
-  garanteret korrekt på hver side.
+- **Billedkonsistens (v2.1+)** — pr. bog bygges en *billedbibel* med **alle
+  gennemgående karakterer** (hovedpersonen først, derefter venner, søskende,
+  dyr, drager …), verden og fast palette, plus et *cast-reference-ark* hvor
+  hele rollebesætningen tegnes samlet. Alle sidebilleder genereres via
+  gpt-image-1 edits med cast-arket som reference, så personer, baggrunde,
+  rekvisitter og farver er ens hele bogen igennem — kun de karakterer der
+  hører til scenen optræder. Teksten placeres altid i samme reserverede bånd
+  i nederste sjettedel af siden (prompten holder området roligt, PDF'en tegner
+  båndet) — så placering og stavning er garanteret korrekt på hver side.
+- **Redigering (v2.2)** — egne bøger kan åbnes igen via *Redigér* i
+  biblioteket: ret titel, navn og sider, justér biblen (tilføj/fjern
+  karakterer, tegn cast-arket igen), og generér enkelt-sider om eller tilføj
+  manglende illustrationer. Alt gemmes oven i den samme bog.
+- **Rollebesætnings-genbrug (v2.3)** — i bibel-trinnet kan en færdig bibel +
+  cast-ark gemmes som en navngiven *rollebesætning* (fx “Sophie-universet”)
+  og anvendes igen i helt nye bøger — samme karakterer, verden og palette
+  på tværs af hele biblioteket. Gemte besætninger kan slettes igen
+  (to-trins bekræftelse). Ligger i browserens IndexedDB (store `casts`).
 - **Dine data er dine** — egne bøger ligger i browserens IndexedDB; OpenAI-
   nøglen gemmes kun lokalt og sendes udelukkende til api.openai.com.
 

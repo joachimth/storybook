@@ -9,6 +9,7 @@ interface Props {
   error: string;
   onRead: (book: Book) => void;
   onNew: () => void;
+  onEdit: (book: Book) => void;
 }
 
 function Cover({ book }: { book: Book }) {
@@ -26,7 +27,7 @@ function Cover({ book }: { book: Book }) {
   return src ? <img class="cover" src={src} alt="" loading="lazy" /> : <div class="cover cover-empty">🎨</div>;
 }
 
-export function Library({ books, loading, error, onRead, onNew }: Props) {
+export function Library({ books, loading, error, onRead, onNew, onEdit }: Props) {
   const [busyId, setBusyId] = useState("");
   const [pdfError, setPdfError] = useState("");
 
@@ -65,6 +66,9 @@ export function Library({ books, loading, error, onRead, onNew }: Props) {
               <button class="btn" disabled={busyId === book.id} onClick={() => void exportPdf(book)}>
                 {busyId === book.id ? "Laver PDF…" : "PDF til print"}
               </button>
+              {!book.builtin && (
+                <button class="btn ghost" onClick={() => onEdit(book)}>Redigér</button>
+              )}
             </div>
           </div>
         </div>

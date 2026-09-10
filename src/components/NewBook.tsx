@@ -1,7 +1,7 @@
-import { useRef, useState } from "preact/hooks";
-import type { Book, StorySuggestion } from "../types";
+import { useEffect, useRef, useState } from "preact/hooks";
+import type { Book, SavedCast, StorySuggestion } from "../types";
 import type { StoryBible } from "../lib/openai";
-import { imageKey, putImage, saveBook } from "../lib/storage";
+import { clearBookImages, deleteCast, getImage, imageKey, listCasts, putImage, saveBook, saveCastRecord } from "../lib/storage";
 import {
   buildStoryBible,
   estimateImageCost,
@@ -16,12 +16,14 @@ import {
 
 interface Props {
   onSaved: () => void;
+  /** Sæt = redigering af en eksisterende bog i stedet for en ny. */
+  editing?: Book;
 }
 
 type Step = "form" | "suggest" | "pages" | "bible" | "images";
 
-export function NewBook({ onSaved }: Props) {
-  const [step, setStep] = useState<Step>("form");
+export function NewBook({ onSaved, editing }: Props) {
+  const [step, setStep] = useState<Step>(editing ? "pages" : "form");
   const [navn, setNavn] = useState("");
   const [alder, setAlder] = useState(5);
   const [antalSider, setAntalSider] = useState(14);
@@ -38,8 +40,116 @@ export function NewBook({ onSaved }: Props) {
   const [error, setError] = useState("");
   const [keyInput, setKeyInput] = useState(getApiKey());
   const [keySaved, setKeySaved] = useState(false);
+  /** Gemte rollebesætninger til genbrug på tværs af bøger. */
+  const [casts, setCasts] = useState<SavedCast[]>([]);
+  const [castName, setCastName] = useState("");
+  const [castSaved, setCastSaved] = useState(false);
+  const [castDeleteConfirm, setCastDeleteConfirm] = useState<string | null>(null);
 
   const hasKey = !!getApiKey();
+
+  const refreshCasts = () => {
+    listCasts().then(setCasts).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (step === "bible") refreshCasts();
+  }, [step]);
+
+  /** Brug en gemt rollebesætning: bibel + cast-ark kopieres ind i denne bog. */
+  const applyCast = async (cast: SavedCast) => {
+    setError("");
+    try {
+      setBible({ ...cast.bible, characters: [...cast.bible.characters] });
+      sheetBlob.current = null;
+      if (cast.sheetSrc && cast.sheetSrc.startsWith("idb:")) {
+        const blob = await getImage(cast.sheetSrc.slice(4));
+        if (blob) sheetBlob.current = blob;
+      }
+      if (sheetUrl) URL.revokeObjectURL(sheetUrl);
+      setSheetUrl(sheetBlob.current ? URL.createObjectURL(sheetBlob.current) : "");
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    }
+  };
+
+  /** Gem nuværende bibel + cast-ark som genbrugelig rollebesætning. */
+  const saveCastPreset = async () => {
+    if (!bible || !sheetBlob.current) {
+      setError("Lav først billedbiblen + cast-arket, så der er noget at gemme.");
+      return;
+    }
+    setError("");
+    try {
+      const id = crypto.randomUUID();
+      const cast: SavedCast = {
+        id,
+        name: castName.trim() || bible.characters[0]?.split(",")[0]?.trim() || "Min rollebesætning",
+        bible: { ...bible, characters: [...bible.characters] },
+        sheetSrc: `idb:cast:${id}:sheet`,
+        createdAt: new Date().toISOString(),
+      };
+      await saveCastRecord(cast, sheetBlob.current);
+      setCastName("");
+      setCastSaved(true);
+      setTimeout(() => setCastSaved(false), 2000);
+      refreshCasts();
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    }
+  };
+
+  const removeCast = async (cast: SavedCast) => {
+    if (castDeleteConfirm !== cast.id) {
+      setCastDeleteConfirm(cast.id);
+      return;
+    }
+    setCastDeleteConfirm(null);
+    try {
+      await deleteCast(cast);
+      refreshCasts();
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e));
+    }
+  };
+
+  /** Redigeringstilstand: indlæs bogens tekst, bibel, cast-ark og billeder fra lageret. */
+  useEffect(() => {
+    if (!editing) return;
+    let cancelled = false;
+    const urls: string[] = [];
+    (async () => {
+      setTitel(editing.title);
+      setNavn(editing.childName);
+      setAlder(editing.childAge ?? 5);
+      setSider(editing.pages.map((p) => p.texts[0] ?? ""));
+      setPrompts(editing.pages.map((p) => p.imagePrompt ?? ""));
+      setImages(new Array(editing.pages.length).fill(null));
+      setBible(editing.bible ?? null);
+      for (let i = 0; i < editing.pages.length; i++) {
+        const p = editing.pages[i];
+        if (p.src && p.src.startsWith("idb:")) {
+          const blob = await getImage(p.src.slice(4));
+          if (blob && !cancelled) {
+            imageBlobs.current.set(i, blob);
+            const u = URL.createObjectURL(blob);
+            urls.push(u);
+            setImages((prev) => { const n = [...prev]; n[i] = u; return n; });
+          }
+        }
+      }
+      if (editing.sheetSrc && editing.sheetSrc.startsWith("idb:")) {
+        const blob = await getImage(editing.sheetSrc.slice(4));
+        if (blob && !cancelled) {
+          sheetBlob.current = blob;
+          const u = URL.createObjectURL(blob);
+          urls.push(u);
+          setSheetUrl(u);
+        }
+      }
+    })().catch(() => setError("Kunne ikke indlæse bogen til redigering."));
+    return () => { cancelled = true; urls.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [editing]);
 
   const saveKey = () => {
     setApiKey(keyInput);
@@ -77,8 +187,10 @@ export function NewBook({ onSaved }: Props) {
       setImages(new Array(list.length).fill(null));
       setPrompts([]);
       setBible(null);
+      if (sheetUrl) URL.revokeObjectURL(sheetUrl);
       setSheetUrl("");
       sheetBlob.current = null;
+      imageBlobs.current.clear();
       setStep("pages");
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
@@ -87,7 +199,7 @@ export function NewBook({ onSaved }: Props) {
     }
   };
 
-  /** Billedbibel + personreference-ark: sikrer samme person, verden og palette på alle sider. */
+  /** Billedbibel + cast-ark: sikrer samme karakterer, verden og palette på alle sider. */
   const doBible = async (regenSheetOnly = false) => {
     setBusy(regenSheetOnly ? "sheet" : "bible");
     setError("");
@@ -158,7 +270,7 @@ export function NewBook({ onSaved }: Props) {
     setBusy("save");
     setError("");
     try {
-      const id = crypto.randomUUID();
+      const id = editing ? editing.id : crypto.randomUUID();
       const sheetKey = imageKey(id, -1);
       const book: Book = {
         id,
@@ -174,8 +286,9 @@ export function NewBook({ onSaved }: Props) {
           src: imageBlobs.current.has(i) ? `idb:${imageKey(id, i)}` : undefined,
           imagePrompt: prompts[i],
         })),
-        createdAt: new Date().toISOString(),
+        createdAt: editing ? editing.createdAt : new Date().toISOString(),
       };
+      if (editing) await clearBookImages(id);
       if (sheetBlob.current) await putImage(sheetKey, sheetBlob.current);
       for (const [i, blob] of imageBlobs.current) {
         await putImage(imageKey(id, i), blob);
@@ -191,21 +304,29 @@ export function NewBook({ onSaved }: Props) {
 
   return (
     <div class="newbook">
-      <div class="keybox">
-        <label for="apikey">OpenAI API-nøgle (til AI-forslag og billeder)</label>
-        <div class="keyrow">
-          <input
-            id="apikey"
-            type="password"
-            inputmode="text"
-            placeholder={hasKey ? "Nøgle gemt ✓ – skriv for at udskifte" : "sk-…"}
-            value={keyInput}
-            onInput={(e) => setKeyInput((e.target as HTMLInputElement).value)}
-          />
-          <button class="btn" onClick={saveKey}>{keySaved ? "Gemt ✓" : "Gem"}</button>
+      {editing && (
+        <div class="edit-banner">
+          Redigerer “{editing.title}” — ret teksten, biblen eller billeder og gem.
         </div>
-        <p class="hint">Nøglen ligger kun i din browsers lager og sendes udelukkende til api.openai.com. Hele bogens billeder koster {estimateImageCost(antalSider + 1)} (inkl. personark).</p>
-      </div>
+      )}
+
+      {!editing && (
+        <div class="keybox">
+          <label for="apikey">OpenAI API-nøgle (til AI-forslag og billeder)</label>
+          <div class="keyrow">
+            <input
+              id="apikey"
+              type="password"
+              inputmode="text"
+              placeholder={hasKey ? "Nøgle gemt ✓ – skriv for at udskifte" : "sk-…"}
+              value={keyInput}
+              onInput={(e) => setKeyInput((e.target as HTMLInputElement).value)}
+            />
+            <button class="btn" onClick={saveKey}>{keySaved ? "Gemt ✓" : "Gem"}</button>
+          </div>
+          <p class="hint">Nøglen ligger kun i din browsers lager og sendes udelukkende til api.openai.com. Hele bogens billeder koster {estimateImageCost(antalSider + 1)} (inkl. cast-ark).</p>
+        </div>
+      )}
 
       {step === "form" && (
         <section class="panel">
@@ -267,7 +388,7 @@ export function NewBook({ onSaved }: Props) {
               />
             </div>
           ))}
-          {hasKey && sider.every((s) => s.trim()) && (
+          {hasKey && sider.every((s) => s.trim()) && !editing && (
             <button
               class="btn primary"
               disabled={busy !== ""}
@@ -277,7 +398,7 @@ export function NewBook({ onSaved }: Props) {
             </button>
           )}
           <div class="actions">
-            <button class="btn ghost" onClick={() => setStep("form")}>Tilbage</button>
+            {!editing && <button class="btn ghost" onClick={() => setStep("form")}>Tilbage</button>}
             <button class="btn primary" disabled={!sider.some((s) => s.trim())} onClick={() => setStep("bible")}>
               Videre til billedbibel
             </button>
@@ -287,30 +408,46 @@ export function NewBook({ onSaved }: Props) {
 
       {step === "bible" && (
         <section class="panel">
-          <h2>4 · Billedbibel</h2>
+          <h2>4 · Billedbibel{editing ? " (redigerer)" : ""}</h2>
           <p class="hint">
-            Biblen låser person, verden og palette fast, og personarket bruges som reference til alle
-            illustrationer — så figuren ser ens ud på hele bogen. Du kan rette teksten før du genererer.
+            Biblen låser ALLE gennemgående karakterer, verden og palette fast, og cast-arket bruges som
+            reference til alle illustrationer — så alle figurer ser ens ud hele bogen igennem. Du kan
+            rette, fjerne og tilføje karakterer, eller tegne arket igen.
           </p>
           {hasKey ? (
             <>
               <div class="actions">
                 <button class="btn primary" disabled={busy !== ""} onClick={() => void doBible()}>
-                  {busy === "bible" ? "Skaber bibel + personark…" : bible ? "Beregn biblen igen" : "Skab billedbibel + personark"}
+                  {busy === "bible" ? "Skaber bibel + cast-ark…" : bible ? "Beregn biblen igen" : "Skab billedbibel + cast-ark"}
                 </button>
                 {bible && (
                   <button class="btn" disabled={busy !== ""} onClick={() => void doBible(true)}>
-                    {busy === "sheet" ? "Tegner…" : "Tegn personark igen"}
+                    {busy === "sheet" ? "Tegner…" : "Tegn cast-ark igen"}
                   </button>
                 )}
               </div>
               {bible && (
                 <>
-                  <div class="field">
-                    <label for="bib-char">Hovedpersonen (ens på alle sider)</label>
-                    <textarea id="bib-char" rows={2} value={bible.character}
-                      onInput={(e) => setBible({ ...bible, character: (e.target as HTMLTextAreaElement).value })} />
-                  </div>
+                  {bible.characters.map((c, i) => (
+                    <div class="field" key={i}>
+                      <label for={`karakter-${i}`}>Karakter {i + 1}</label>
+                      <div class="cast-edit">
+                        <textarea
+                          id={`karakter-${i}`}
+                          rows={2}
+                          value={c}
+                          placeholder=" fx: 5-årig pige, rødt krøllet hår, lyserød kjole, gul krone…"
+                          onInput={(e) => setBible({ ...bible, characters: bible.characters.map((x, j) => (j === i ? (e.target as HTMLTextAreaElement).value : x)) })}
+                        />
+                        {bible.characters.length > 1 && (
+                          <button class="btn small" onClick={() => setBible({ ...bible, characters: bible.characters.filter((_, j) => j !== i) })}>Fjern</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <button class="btn small" onClick={() => setBible({ ...bible, characters: [...bible.characters, ""] })}>
+                    + Tilføj karakter
+                  </button>
                   <div class="field">
                     <label for="bib-world">Verden og tilbagevendende ting</label>
                     <textarea id="bib-world" rows={2} value={bible.world}
@@ -325,14 +462,45 @@ export function NewBook({ onSaved }: Props) {
               )}
               {sheetUrl && (
                 <div class="sheet-preview">
-                  <img src={sheetUrl} alt="Personreference-ark" />
-                  <p class="hint">Personreference-ark — bruges som reference til alle sider.</p>
+                  <img src={sheetUrl} alt="Cast-reference-ark" />
+                  <p class="hint">Cast-ark med alle karakterer — bruges som reference til alle sider.</p>
                 </div>
               )}
             </>
           ) : (
             <p class="hint">Uden API-nøgle springes konsistens-genereringen over — alle illustrationer genereres så uden reference.</p>
           )}
+
+          <div class="castlib">
+            <h3>Genbrug rollebesætning</h3>
+            <p class="hint">Gemte karakterer, verdener og cast-ark kan bruges igen i nye bøger — fx et helt univers med samme figurer.</p>
+            {casts.length === 0 ? (
+              <p class="hint">Ingen gemte rollebesætninger endnu. Lav biblen ovenfor og gem den her.</p>
+            ) : (
+              casts.map((c) => (
+                <div class="castrow" key={c.id}>
+                  <button class="btn" onClick={() => void applyCast(c)}>Anvend “{c.name}”</button>
+                  <button class="btn small" onClick={() => void removeCast(c)}>
+                    {castDeleteConfirm === c.id ? "Sikker?" : "Slet"}
+                  </button>
+                </div>
+              ))
+            )}
+            {bible && sheetUrl && (
+              <div class="keyrow">
+                <input
+                  type="text"
+                  placeholder="Navn, fx Sophie-universet"
+                  value={castName}
+                  onInput={(e) => setCastName((e.target as HTMLInputElement).value)}
+                />
+                <button class="btn" onClick={() => void saveCastPreset()}>
+                  {castSaved ? "Gemt ✓" : "Gem til genbrug"}
+                </button>
+              </div>
+            )}
+          </div>
+
           <div class="actions">
             <button class="btn ghost" onClick={() => setStep("pages")}>Tilbage til teksten</button>
             <button class="btn primary" disabled={!sider.some((s) => s.trim())} onClick={() => { if (prompts.length !== sider.length && hasKey) void doPrompts().catch((e) => setError(String((e as Error)?.message ?? e))); setStep("images"); }}>
@@ -344,12 +512,12 @@ export function NewBook({ onSaved }: Props) {
 
       {step === "images" && (
         <section class="panel">
-          <h2>5 · Illustrationer</h2>
+          <h2>5 · Illustrationer{editing ? " (redigerer)" : ""}</h2>
           <p class="hint">
             {hasKey && bible
-              ? "Alle billeder genereres ud fra biblen og personarket, så person, farver og ting matcher hele bogen igennem."
+              ? "Alle billeder genereres ud fra biblen og cast-arket, så karakterer, farver og ting matcher hele bogen igennem."
               : hasKey
-                ? "Tip: gå tilbage og lav billedbiblen — uden den kan person og farver variere fra side til side."
+                ? "Tip: lav billedbiblen først — uden den kan karakterer og farver variere fra side til side."
                 : "Uden API-nøgle kan du gemme bogen med tekst og tilføje illustrationer senere."}
             Teksten placeres altid i samme bånd nederst på siden.
           </p>
@@ -358,7 +526,7 @@ export function NewBook({ onSaved }: Props) {
               {busy.startsWith("images") ? `Billede ${busy.split("-")[1] ?? ""} af ${sider.length}…` : `Generér alle billeder (${estimateImageCost(sider.length)})`}
             </button>
             <button class="btn primary" disabled={busy !== ""} onClick={() => void doSave()}>
-              {busy === "save" ? "Gemmer…" : "Gem bogen"}
+              {busy === "save" ? "Gemmer…" : editing ? "Gem ændringerne" : "Gem bogen"}
             </button>
           </div>
           <div class="page-grid">

@@ -64,10 +64,11 @@ JSON-format: {"sider":["sætning side 1","sætning side 2",...]}`
   return sider.map((s) => String(s).trim());
 }
 
-/** ------------------ Billedbibel: person, verden, palette ------------------ */
+/** ------------------ Billedbibel: rollebesætning, verden, palette ------------------ */
 
 export interface StoryBible {
-  character: string;
+  /** ALLE gennemgående karakterer — hovedpersonen først. Hver beskrivelse låser personens udseende. */
+  characters: string[];
   world: string;
   palette: string;
 }
@@ -79,18 +80,18 @@ export async function buildStoryBible(titel: string, sider: string[]): Promise<S
 ${sider.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 
 Build a visual bible that an illustrator can follow so EVERY page looks consistent:
-- character: 1-2 sentences with the main character's exact physical look (age, hair color and style, skin, clothes, shoes, any crown/accessory). This must be identical on every page.
+- characters: a list with EVERY recurring character in the story (the main child first, then everyone/anything that appears on more than one page: friends, siblings, animals, dragons, toys...). For each: 1-2 sentences with the exact physical look (age, hair color and style, skin, clothes, shoes, accessories, and for creatures: color, size, friendly/scary look). Each must be identical on every page they appear.
 - world: the recurring setting(s) and the key props/objects that appear more than once, described so they keep the same shape and color every time.
 - palette: 5-6 specific colors (names) used throughout the entire book.
 
-JSON format: {"character":"...","world":"...","palette":"..."}`,
+JSON format: {"characters":["...","..."],"world":"...","palette":"..."}`,
     0.5
   );
   const bible = o as unknown as StoryBible;
-  if (!bible.character || !bible.world || !bible.palette) {
+  if (!Array.isArray(bible.characters) || bible.characters.length === 0 || !bible.world || !bible.palette) {
     throw new Error("Ufuldstændig billedbibel i svaret");
   }
-  return bible;
+  return { ...bible, characters: bible.characters.map((c) => String(c).trim()) };
 }
 
 /** ------------------ Billedgenerering ------------------ */
@@ -116,28 +117,34 @@ async function readImageResponse(res: Response): Promise<Blob> {
   return b64ToBlob(b64);
 }
 
-/** Reference-ark med hovedpersonen + tilbagevendende rekvisitter. Bruges som reference til ALLE sider. */
+/** Reference-ark med HELE rollebesætningen + tilbagevendende rekvisitter. Bruges som reference til ALLE sider. */
 export async function generateCharacterSheet(bible: StoryBible): Promise<Blob> {
   const key = getApiKey();
   if (!key) throw new Error("Ingen API-nøgle. Indtast den øverst under 'Ny bog'.");
-  const prompt = `Children's picture book character reference sheet, ${STYLE}
-The main character, full body, standing, front view, smiling: ${bible.character}
-On a plain warm cream background. Beside the character, the recurring props from the story, each drawn once, clearly and simply: ${bible.world}
+  const cast = bible.characters
+    .map((c, i) => `${i + 1}. ${c}`)
+    .join("\n");
+  const prompt = `Children's picture book character reference sheet with MULTIPLE characters, ${STYLE}
+The full cast of the book, every character drawn full body, standing, front view, smiling, side by side in a row on a plain warm cream background:
+${cast}
+Below the characters, the recurring props from the story, each drawn once, clearly and simply: ${bible.world}
 Use exactly this palette throughout: ${bible.palette}`;
   const res = await fetch(`${API}/images/generations`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({ model: "gpt-image-1", prompt, size: "1024x1024", quality: "medium" }),
+    body: JSON.stringify({ model: "gpt-image-1", prompt, size: "1536x1024", quality: "medium" }),
   });
   return readImageResponse(res);
 }
 
-/** Illustrerer én side. Med personarket som reference giver gpt-image-1 edits ens person, stil og palette hele bogen igennem. */
+/** Illustrerer én side. Med cast-arket som reference giver gpt-image-1 edits ens karakterer, stil og palette hele bogen igennem. */
 export async function illustratePage(scene: string, bible: StoryBible, sheet?: Blob): Promise<Blob> {
   const key = getApiKey();
   if (!key) throw new Error("Ingen API-nøgle. Indtast den øverst under 'Ny bog'.");
+  const cast = bible.characters.map((c, i) => `${i + 1}. ${c}`).join("\n");
   const prompt = `Children's picture book illustration, ${STYLE}
-${sheet ? "Match the attached reference sheet EXACTLY: same character design, same watercolor style, same palette. " : ""}Main character (identical on every page): ${bible.character}
+${sheet ? "Match the attached reference sheet EXACTLY: same character designs, same watercolor style, same palette. Only the characters that belong in this scene appear. " : ""}The cast (each character identical on every page they appear in):
+${cast}
 World and recurring props (same shapes and colors every time): ${bible.world}
 Palette: ${bible.palette}
 Scene for this page: ${scene}
