@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/App.tsx","./src/components/Library.tsx","./src/components/NewBook.tsx","./src/components/Reader.tsx","./src/lib/openai.ts","./src/lib/pdf.ts","./src/lib/storage.ts"],"version":"5.9.3"}

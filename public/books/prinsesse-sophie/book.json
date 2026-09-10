@@ -1,0 +1,46 @@
+{
+  "id": "prinsesse-sophie",
+  "title": "Prinsesse Sophie på eventyr",
+  "childName": "Sophie",
+  "childAge": 5,
+  "dedication": "made with love for Sophie Thirsbro",
+  "builtin": true,
+  "note": "Teksten er malet ind i billederne af billedmodellen. Opslag 5 er p.t. kendt med et plottområde (den røde prik bliver ikke forklaret) - udskiftning er på vej.",
+  "pages": [
+    {
+      "layout": "spread",
+      "src": "spread1.jpg",
+      "texts": ["Prinsesse Sophie på eventyr", "Der var engang en lille prinsesse, der hed Sophie. Hun boede i et slot med gyldne tårne."]
+    },
+    {
+      "layout": "spread",
+      "src": "spread2.jpg",
+      "texts": ["Hun pakkede sin taske og gik af sted.", "På vejen mødte hun en drage, der spærrede vejen."]
+    },
+    {
+      "layout": "spread",
+      "src": "spread3.jpg",
+      "texts": ["Dragen var slet ikke farlig.", "Sophie og dragen blev gode venner."]
+    },
+    {
+      "layout": "spread",
+      "src": "spread4.jpg",
+      "texts": ["Sammen gik de videre over en lille bro.", "På en bakke så Sophie en lille rød prik."]
+    },
+    {
+      "layout": "spread",
+      "src": "spread5.jpg",
+      "texts": ["De legede med en mariehøne.", "Til sidst vinkede Sophie farvel."]
+    },
+    {
+      "layout": "spread",
+      "src": "spread6.jpg",
+      "texts": ["Sophie var hjemme igen.", "Sikken en dejlig dag!"]
+    },
+    {
+      "layout": "spread",
+      "src": "spread7.jpg",
+      "texts": ["made with love for Sophie Thirsbro"]
+    }
+  ]
+}

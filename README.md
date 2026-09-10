@@ -1,102 +1,56 @@
-# Børnebog Generator
+# Billedbogsværkstedet (storybook)
 
-[![CI](https://github.com/joachimth/storybook/actions/workflows/ci.yml/badge.svg)](https://github.com/joachimth/storybook/actions/workflows/ci.yml)
+Personlige børnebøger i akvarelstil — læs dem på telefonen og eksportér en
+trykklar 15×15 cm PDF (Pixum softcover-format), direkte fra browseren.
 
-Generer personlige, trykklar børnebøger i akvarelstil vha. GPT-4 og DALL-E. Output: 15×15 cm PDF klar til tryk hos Pixum (softcover).
+**Live:** <https://joachimth.github.io/storybook/>
 
 ## Funktioner
 
-- **Forslag** - GPT-4 genererer 3 historieforslag ud fra barnets navn og alder
-- **Historie** - fuld 14-siders tekst genereret og gemt som JSON
-- **Billeder** - DALL-E genererer et akvarelillustration pr. side (1024×1024, upscalet til 1772×1772 px / 300 DPI)
-- **PDF** - tekst composites ned på billederne og eksporteres som 150×150 mm PDF
-- **GUI** - Tkinter-frontend til hele flowet uden terminal
+- **Bibliotek** — alle bøger samlet; den medfølgende bog er *Prinsesse Sophie
+  på eventyr* (7 opslag, akvarel).
+- **Læs** — opslagssiden med swipe, pile og tastatur.
+- **PDF-eksport** — 15×15 cm, spread-billeder som 150×100 mm bånd (identisk
+  med de eksisterende Pixum-PDF'er), egne bøger får billede + tekst pr. side
+  og en dedikationsside. Alt genereres klient-side med jsPDF.
+- **Ny bog** — indtast navn + alder, få 3 AI-forslag eller skriv selv,
+  redigér hver sætning, og lad gpt-image-1 illustrere én side ad gangen eller
+  hele bogen. Billederne kan tegnes igen enkeltvis.
+- **Dine data er dine** — egne bøger ligger i browserens IndexedDB; OpenAI-
+  nøglen gemmes kun lokalt og sendes udelukkende til api.openai.com.
 
-## Screenshots
+## Teknisk
 
-### API Dokumentation (Swagger UI)
-![API Docs](screenshots/01_api_docs.png)
-
-### ReDoc
-![ReDoc](screenshots/02_api_redoc.png)
-
-## Krav
-
-- Python 3.10+
-- OpenAI API-nøgle med adgang til GPT-4 og DALL-E
-
-## Kom i gang
+- Vite + Preact + TypeScript, jsPDF til eksport.
+- Bøger bundlet med app'en ligger i `public/books/<id>/` (`book.json` +
+  billeder). Egen-bøger: IndexedDB (`books`, `images`).
+- Billedegenerering: `gpt-image-1` (1024×1024, medium ≈ $0,04/stk),
+  historie/forslag: `gpt-4o-mini`.
 
 ```bash
-# 1. Klone repo
-git clone https://github.com/joachimth/storybook.git
-cd storybook
-
-# 2. Installer afhængigheder
-pip install -r requirements.txt
-
-# 3. Sæt API-nøgle
-cp .env.example .env
-# Rediger .env og indsæt din OPENAI_API_KEY
-
-# 4. Start backend
-uvicorn app.main:app --reload
-
-# 5. Start GUI (separat terminal)
-python gui.py
+bun install
+bun run dev      # lokal udvikling
+bun run build    # typecheck + produktionsbuild (bruges af CI)
 ```
 
-## Brug
-
-1. Indtast barnets navn og alder i GUI'en
-2. Klik **"1. Hent forslag"** - vælg en historie
-3. Klik **"2. Generér historie"** - teksten skrives og gemmes
-4. Klik **"3. Generér billeder"** - DALL-E genererer 14 illustrationer (tager ~5-10 min)
-5. Klik **"4. Eksportér PDF"** - PDF gemmes i `output/`
-
-## Konfiguration
-
-Alle indstillinger i `config.yaml`. Secrets sættes via miljøvariabler (se `.env.example`):
-
-| Variabel | Beskrivelse |
-|---|---|
-| `OPENAI_API_KEY` | OpenAI API-nøgle (påkrævet) |
-| `DEFAULT_NAME` | Standardnavn til test |
-
-| config.yaml-nøgle | Standard | Beskrivelse |
-|---|---|---|
-| `model` | `gpt-4` | GPT-model til tekst |
-| `default_pages` | `14` | Antal sider |
-| `dpi` | `300` | DPI til billedoutput |
-| `pdf_size_mm` | `150` | PDF-størrelse (mm) |
-
-## Projektstruktur
+## Struktur
 
 ```
-storybook/
-├── app/
-│   ├── config.py          # Konfigurationsindlæsning + env-overrides
-│   ├── main.py            # FastAPI app
-│   ├── models.py          # Pydantic modeller
-│   └── endpoints/
-│       ├── suggestions.py # POST /generate_suggestions
-│       ├── story.py       # POST /generate_story
-│       ├── images.py      # POST /generate_images
-│       └── pdf.py         # POST /export_pdf
-├── assets/fonts/          # DejaVuSans (Unicode PDF-font)
-├── gui.py                 # Tkinter desktop-app
-├── capture-screenshots.py # Playwright screenshot-automation
-├── config.yaml            # Appkonfiguration
-└── requirements.txt
+src/            # web-app (Preact)
+  components/   # App, Library, Reader, NewBook
+  lib/          # storage (IndexedDB), openai, pdf
+public/books/   # bundede bøger (Sophies bog)
+python-app/     # den oprindelige FastAPI+Tkinter-app (legacy, vedligeholdes ikke)
+.github/workflows/deploy.yml   # CI + Pages-deploy
 ```
 
-## API Endpoints
+## Historik
 
-| Method | Path | Beskrivelse |
-|---|---|---|
-| POST | `/generate_suggestions` | Returnerer 3 historieforslag |
-| POST | `/generate_story` | Genererer fuld historie og gemmer JSON |
-| POST | `/generate_images` | Genererer DALL-E billeder pr. side |
-| POST | `/export_pdf` | Bygger trykklar PDF |
-
-Fuld dokumentation: `http://localhost:8000/docs`
+- **v2.0 (sep 2026):** web-app på GitHub Pages, JavaScript/Preact. Python-app
+  (GPT-4 + DALL-E + Tkinter, juni 2026) er flyttet til `python-app/` som
+  legacy-reference — se `python-app/AUDIT.md`.
+- Kendt issue i *Prinsesse Sophie*: opslag 5 efterlader "den lille røde prik"
+  uforklaret (teksten er malet ind i billederne af billedmodellen, så den
+  siden kræver et nyt billede med gpt-image-1 + references fra opslag 3-4).
+  `python-app/tools/finish_sophie_book.py` klarer generering + samling af den
+  endelige PDF når OpenAI-kontoen har credits.
