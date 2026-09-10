@@ -1,11 +1,14 @@
 import { useRef, useState } from "preact/hooks";
 import type { Book, StorySuggestion } from "../types";
+import type { StoryBible } from "../lib/openai";
 import { imageKey, putImage, saveBook } from "../lib/storage";
 import {
+  buildStoryBible,
   estimateImageCost,
-  generateIllustration,
+  generateCharacterSheet,
   getApiKey,
   illustrationPrompts,
+  illustratePage,
   setApiKey,
   suggestStories,
   writeStory,
@@ -15,10 +18,7 @@ interface Props {
   onSaved: () => void;
 }
 
-type Step = "form" | "suggest" | "pages" | "images";
-
-const STYLE_NOTE =
-  "soft watercolor children's book illustration, warm pastel palette, gentle rounded shapes, cozy and kind atmosphere";
+type Step = "form" | "suggest" | "pages" | "bible" | "images";
 
 export function NewBook({ onSaved }: Props) {
   const [step, setStep] = useState<Step>("form");
@@ -27,6 +27,10 @@ export function NewBook({ onSaved }: Props) {
   const [antalSider, setAntalSider] = useState(14);
   const [titel, setTitel] = useState("");
   const [sider, setSider] = useState<string[]>([]);
+  const [suggestionsList, setSuggestionsList] = useState<StorySuggestion[]>([]);
+  const [bible, setBible] = useState<StoryBible | null>(null);
+  const [sheetUrl, setSheetUrl] = useState("");
+  const sheetBlob = useRef<Blob | null>(null);
   const [prompts, setPrompts] = useState<string[]>([]);
   const [images, setImages] = useState<(string | null)[]>([]);
   const imageBlobs = useRef<Map<number, Blob>>(new Map());
@@ -56,7 +60,6 @@ export function NewBook({ onSaved }: Props) {
       setBusy("");
     }
   };
-  const [suggestionsList, setSuggestionsList] = useState<StorySuggestion[]>([]);
 
   const doStory = async (
     t: string,
@@ -72,6 +75,10 @@ export function NewBook({ onSaved }: Props) {
       setTitel(t);
       setSider(list);
       setImages(new Array(list.length).fill(null));
+      setPrompts([]);
+      setBible(null);
+      setSheetUrl("");
+      sheetBlob.current = null;
       setStep("pages");
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
@@ -80,12 +87,20 @@ export function NewBook({ onSaved }: Props) {
     }
   };
 
-  const doPrompts = async () => {
-    setBusy("prompts");
+  /** Billedbibel + personreference-ark: sikrer samme person, verden og palette på alle sider. */
+  const doBible = async (regenSheetOnly = false) => {
+    setBusy(regenSheetOnly ? "sheet" : "bible");
     setError("");
     try {
-      const list = await illustrationPrompts(sider, STYLE_NOTE);
-      setPrompts(list);
+      let b = bible;
+      if (!b || !regenSheetOnly) {
+        b = await buildStoryBible(titel || `${navn}s bog`, sider);
+        setBible(b);
+      }
+      const blob = await generateCharacterSheet(b);
+      sheetBlob.current = blob;
+      if (sheetUrl) URL.revokeObjectURL(sheetUrl);
+      setSheetUrl(URL.createObjectURL(blob));
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
     } finally {
@@ -93,9 +108,16 @@ export function NewBook({ onSaved }: Props) {
     }
   };
 
-  const generateOne = async (i: number) => {
-    const prompt = prompts[i] || `Children's book watercolor illustration of: ${sider[i]}. ${STYLE_NOTE}. No text in the image.`;
-    const blob = await generateIllustration(prompt);
+  const doPrompts = async () => {
+    const list = await illustrationPrompts(sider);
+    setPrompts(list);
+    return list;
+  };
+
+  const generateOne = async (i: number, promptList: string[]) => {
+    if (!bible) throw new Error("Lav først billedbiblen");
+    const scene = promptList[i] || sider[i];
+    const blob = await illustratePage(scene, bible, sheetBlob.current ?? undefined);
     imageBlobs.current.set(i, blob);
     const url = URL.createObjectURL(blob);
     setImages((prev) => { const next = [...prev]; next[i] = url; return next; });
@@ -105,11 +127,12 @@ export function NewBook({ onSaved }: Props) {
     setBusy("images");
     setError("");
     try {
-      if (prompts.length !== sider.length) await doPrompts();
+      let promptList = prompts;
+      if (promptList.length !== sider.length) promptList = await doPrompts();
       for (let i = 0; i < sider.length; i++) {
         if (!imageBlobs.current.has(i)) {
           setBusy(`images-${i + 1}`);
-          await generateOne(i);
+          await generateOne(i, promptList);
         }
       }
     } catch (e) {
@@ -123,7 +146,7 @@ export function NewBook({ onSaved }: Props) {
     setBusy(`regen-${i}`);
     setError("");
     try {
-      await generateOne(i);
+      await generateOne(i, prompts);
     } catch (e) {
       setError(String((e as Error)?.message ?? e));
     } finally {
@@ -136,12 +159,15 @@ export function NewBook({ onSaved }: Props) {
     setError("");
     try {
       const id = crypto.randomUUID();
+      const sheetKey = imageKey(id, -1);
       const book: Book = {
         id,
         title: titel || `${navn || "Min"}s bog`,
         childName: navn,
         childAge: alder,
         dedication: `made with love for ${navn}`,
+        bible: bible ?? undefined,
+        sheetSrc: sheetBlob.current ? `idb:${sheetKey}` : undefined,
         pages: sider.map((text, i) => ({
           texts: [text],
           layout: "square" as const,
@@ -150,6 +176,7 @@ export function NewBook({ onSaved }: Props) {
         })),
         createdAt: new Date().toISOString(),
       };
+      if (sheetBlob.current) await putImage(sheetKey, sheetBlob.current);
       for (const [i, blob] of imageBlobs.current) {
         await putImage(imageKey(id, i), blob);
       }
@@ -177,7 +204,7 @@ export function NewBook({ onSaved }: Props) {
           />
           <button class="btn" onClick={saveKey}>{keySaved ? "Gemt ✓" : "Gem"}</button>
         </div>
-        <p class="hint">Nøglen ligger kun i din browsers lager og sendes udelukkende til api.openai.com. Billeder koster {estimateImageCost(antalSider)} for hele bogen.</p>
+        <p class="hint">Nøglen ligger kun i din browsers lager og sendes udelukkende til api.openai.com. Hele bogens billeder koster {estimateImageCost(antalSider + 1)} (inkl. personark).</p>
       </div>
 
       {step === "form" && (
@@ -251,8 +278,65 @@ export function NewBook({ onSaved }: Props) {
           )}
           <div class="actions">
             <button class="btn ghost" onClick={() => setStep("form")}>Tilbage</button>
-            <button class="btn primary" disabled={!sider.some((s) => s.trim())} onClick={() => { if (prompts.length !== sider.length && hasKey) void doPrompts(); setStep("images"); }}>
-              Videre til billeder
+            <button class="btn primary" disabled={!sider.some((s) => s.trim())} onClick={() => setStep("bible")}>
+              Videre til billedbibel
+            </button>
+          </div>
+        </section>
+      )}
+
+      {step === "bible" && (
+        <section class="panel">
+          <h2>4 · Billedbibel</h2>
+          <p class="hint">
+            Biblen låser person, verden og palette fast, og personarket bruges som reference til alle
+            illustrationer — så figuren ser ens ud på hele bogen. Du kan rette teksten før du genererer.
+          </p>
+          {hasKey ? (
+            <>
+              <div class="actions">
+                <button class="btn primary" disabled={busy !== ""} onClick={() => void doBible()}>
+                  {busy === "bible" ? "Skaber bibel + personark…" : bible ? "Beregn biblen igen" : "Skab billedbibel + personark"}
+                </button>
+                {bible && (
+                  <button class="btn" disabled={busy !== ""} onClick={() => void doBible(true)}>
+                    {busy === "sheet" ? "Tegner…" : "Tegn personark igen"}
+                  </button>
+                )}
+              </div>
+              {bible && (
+                <>
+                  <div class="field">
+                    <label for="bib-char">Hovedpersonen (ens på alle sider)</label>
+                    <textarea id="bib-char" rows={2} value={bible.character}
+                      onInput={(e) => setBible({ ...bible, character: (e.target as HTMLTextAreaElement).value })} />
+                  </div>
+                  <div class="field">
+                    <label for="bib-world">Verden og tilbagevendende ting</label>
+                    <textarea id="bib-world" rows={2} value={bible.world}
+                      onInput={(e) => setBible({ ...bible, world: (e.target as HTMLTextAreaElement).value })} />
+                  </div>
+                  <div class="field">
+                    <label for="bib-pal">Palette</label>
+                    <input id="bib-pal" type="text" value={bible.palette}
+                      onInput={(e) => setBible({ ...bible, palette: (e.target as HTMLInputElement).value })} />
+                  </div>
+                </>
+              )}
+              {sheetUrl && (
+                <div class="sheet-preview">
+                  <img src={sheetUrl} alt="Personreference-ark" />
+                  <p class="hint">Personreference-ark — bruges som reference til alle sider.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p class="hint">Uden API-nøgle springes konsistens-genereringen over — alle illustrationer genereres så uden reference.</p>
+          )}
+          <div class="actions">
+            <button class="btn ghost" onClick={() => setStep("pages")}>Tilbage til teksten</button>
+            <button class="btn primary" disabled={!sider.some((s) => s.trim())} onClick={() => { if (prompts.length !== sider.length && hasKey) void doPrompts().catch((e) => setError(String((e as Error)?.message ?? e))); setStep("images"); }}>
+              Videre til illustrationer
             </button>
           </div>
         </section>
@@ -260,11 +344,14 @@ export function NewBook({ onSaved }: Props) {
 
       {step === "images" && (
         <section class="panel">
-          <h2>4 · Illustrationer</h2>
+          <h2>5 · Illustrationer</h2>
           <p class="hint">
-            {hasKey
-              ? `Generér alle ${sider.length} billeder (${estimateImageCost(sider.length)}) eller ét ad gangen. Du kan også gemme bogen nu og generere senere.`
-              : "Uden API-nøgle kan du gemme bogen med tekst og tilføje illustrationer senere."}
+            {hasKey && bible
+              ? "Alle billeder genereres ud fra biblen og personarket, så person, farver og ting matcher hele bogen igennem."
+              : hasKey
+                ? "Tip: gå tilbage og lav billedbiblen — uden den kan person og farver variere fra side til side."
+                : "Uden API-nøgle kan du gemme bogen med tekst og tilføje illustrationer senere."}
+            Teksten placeres altid i samme bånd nederst på siden.
           </p>
           <div class="actions">
             <button class="btn primary" disabled={!hasKey || busy.startsWith("images")} onClick={() => void generateAll()}>
@@ -291,7 +378,7 @@ export function NewBook({ onSaved }: Props) {
               </div>
             ))}
           </div>
-          <button class="btn ghost" onClick={() => setStep("pages")}>Tilbage til teksten</button>
+          <button class="btn ghost" onClick={() => setStep("bible")}>Tilbage til billedbiblen</button>
         </section>
       )}
 

@@ -64,35 +64,48 @@ JSON-format: {"sider":["sætning side 1","sætning side 2",...]}`
   return sider.map((s) => String(s).trim());
 }
 
-export async function illustrationPrompts(sider: string[], styleNote: string): Promise<string[]> {
-  const o = await chatJson(
-    "You are an art director for children's picture books. You answer with valid JSON only.",
-    `For each story page below, write ONE concise English illustration prompt (1-2 sentences). Style: ${styleNote}. Keep the main character consistent across all prompts. No text or letters in the images.
-Pages:
-${sider.map((s, i) => `${i + 1}. ${s}`).join("\n")}
-JSON format: {"prompts":["prompt for page 1","prompt for page 2",...]}`,
-    0.7
-  );
-  const prompts = (o.prompts as string[]) ?? [];
-  if (!Array.isArray(prompts) || prompts.length !== sider.length) {
-    throw new Error("Forkert antal prompts i svaret");
-  }
-  return prompts.map((p) => String(p).trim());
+/** ------------------ Billedbibel: person, verden, palette ------------------ */
+
+export interface StoryBible {
+  character: string;
+  world: string;
+  palette: string;
 }
 
-export async function generateIllustration(prompt: string): Promise<Blob> {
-  const key = getApiKey();
-  if (!key) throw new Error("Ingen API-nøgle. Indtast den øverst under 'Ny bog'.");
-  const res = await fetch(`${API}/images/generations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: "gpt-image-1",
-      prompt,
-      size: "1024x1024",
-      quality: "medium",
-    }),
-  });
+export async function buildStoryBible(titel: string, sider: string[]): Promise<StoryBible> {
+  const o = await chatJson(
+    "You are an art director for children's picture books. You ensure every illustration in a book looks like it came from the same hand. You answer with valid JSON only.",
+    `Book title: "${titel}". The story pages:
+${sider.map((s, i) => `${i + 1}. ${s}`).join("\n")}
+
+Build a visual bible that an illustrator can follow so EVERY page looks consistent:
+- character: 1-2 sentences with the main character's exact physical look (age, hair color and style, skin, clothes, shoes, any crown/accessory). This must be identical on every page.
+- world: the recurring setting(s) and the key props/objects that appear more than once, described so they keep the same shape and color every time.
+- palette: 5-6 specific colors (names) used throughout the entire book.
+
+JSON format: {"character":"...","world":"...","palette":"..."}`,
+    0.5
+  );
+  const bible = o as unknown as StoryBible;
+  if (!bible.character || !bible.world || !bible.palette) {
+    throw new Error("Ufuldstændig billedbibel i svaret");
+  }
+  return bible;
+}
+
+/** ------------------ Billedgenerering ------------------ */
+
+const STYLE =
+  "Soft watercolor children's picture book illustration, warm pastel palette, gentle rounded shapes, cozy and kind atmosphere. No text, no letters, no watermark anywhere.";
+
+function b64ToBlob(b64: string): Blob {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: "image/png" });
+}
+
+async function readImageResponse(res: Response): Promise<Blob> {
   if (!res.ok) {
     const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
     throw new Error(err?.error?.message ?? `OpenAI-fejl (HTTP ${res.status})`);
@@ -100,10 +113,73 @@ export async function generateIllustration(prompt: string): Promise<Blob> {
   const data = (await res.json()) as { data: { b64_json: string }[] };
   const b64 = data.data?.[0]?.b64_json;
   if (!b64) throw new Error("Intet billede i svaret");
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new Blob([bytes], { type: "image/png" });
+  return b64ToBlob(b64);
+}
+
+/** Reference-ark med hovedpersonen + tilbagevendende rekvisitter. Bruges som reference til ALLE sider. */
+export async function generateCharacterSheet(bible: StoryBible): Promise<Blob> {
+  const key = getApiKey();
+  if (!key) throw new Error("Ingen API-nøgle. Indtast den øverst under 'Ny bog'.");
+  const prompt = `Children's picture book character reference sheet, ${STYLE}
+The main character, full body, standing, front view, smiling: ${bible.character}
+On a plain warm cream background. Beside the character, the recurring props from the story, each drawn once, clearly and simply: ${bible.world}
+Use exactly this palette throughout: ${bible.palette}`;
+  const res = await fetch(`${API}/images/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: "gpt-image-1", prompt, size: "1024x1024", quality: "medium" }),
+  });
+  return readImageResponse(res);
+}
+
+/** Illustrerer én side. Med personarket som reference giver gpt-image-1 edits ens person, stil og palette hele bogen igennem. */
+export async function illustratePage(scene: string, bible: StoryBible, sheet?: Blob): Promise<Blob> {
+  const key = getApiKey();
+  if (!key) throw new Error("Ingen API-nøgle. Indtast den øverst under 'Ny bog'.");
+  const prompt = `Children's picture book illustration, ${STYLE}
+${sheet ? "Match the attached reference sheet EXACTLY: same character design, same watercolor style, same palette. " : ""}Main character (identical on every page): ${bible.character}
+World and recurring props (same shapes and colors every time): ${bible.world}
+Palette: ${bible.palette}
+Scene for this page: ${scene}
+Composition: one single page. Keep the lower sixth of the image calm and uncluttered (soft ground or sky) — the story text will be placed there later.`;
+
+  if (sheet) {
+    const form = new FormData();
+    form.append("model", "gpt-image-1");
+    form.append("image[]", sheet, "character_sheet.png");
+    form.append("size", "1024x1024");
+    form.append("quality", "medium");
+    form.append("prompt", prompt);
+    const res = await fetch(`${API}/images/edits`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+    });
+    return readImageResponse(res);
+  }
+  const res = await fetch(`${API}/images/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    body: JSON.stringify({ model: "gpt-image-1", prompt, size: "1024x1024", quality: "medium" }),
+  });
+  return readImageResponse(res);
+}
+
+/** Engelske scene-beskrivelser pr. side (biblen sørger for konsistensen; disse sørger for præcise motiver). */
+export async function illustrationPrompts(sider: string[]): Promise<string[]> {
+  const o = await chatJson(
+    "You are an art director for children's picture books. You answer with valid JSON only.",
+    `For each story page below, write ONE concise English scene description (1-2 sentences) describing what is happening, where, and the character's expression/pose. Do not describe style or colors (they are handled separately).
+Pages:
+${sider.map((s, i) => `${i + 1}. ${s}`).join("\n")}
+JSON format: {"prompts":["scene for page 1","scene for page 2",...]}`,
+    0.7
+  );
+  const prompts = (o.prompts as string[]) ?? [];
+  if (!Array.isArray(prompts) || prompts.length !== sider.length) {
+    throw new Error("Forkert antal prompts i svaret");
+  }
+  return prompts.map((p) => String(p).trim());
 }
 
 /** Cirka-pris for billedgenerering (gpt-image-1, medium, 1024x1024 ≈ $0,04/stk). */

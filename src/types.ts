@@ -18,6 +18,10 @@ export interface Book {
   dedication?: string;
   builtin?: boolean;
   note?: string;
+  /** Fast billedbibel så alle illustrationer matcher (person, verden, palette). */
+  bible?: { character: string; world: string; palette: string };
+  /** idb-nøgle til personreference-arket ("idb:<key>"). */
+  sheetSrc?: string;
   pages: BookPage[];
   createdAt: string;
 }

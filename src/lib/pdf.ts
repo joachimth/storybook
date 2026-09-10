@@ -49,16 +49,27 @@ export async function exportBookPdf(book: Book): Promise<void> {
       if (url) {
         const data = await toDataUrl(url);
         const fmt = data.startsWith("data:image/png") ? "PNG" : "JPEG";
-        doc.addImage(data, fmt, 10, 8, 130, 130);
+        doc.addImage(data, fmt, 0, 0, 150, 150);
       }
       const text = page.texts.filter(Boolean).join(" ");
       if (text) {
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(14);
-        doc.setTextColor(60, 45, 35);
-        const lines = doc.splitTextToSize(text, 126) as string[];
-        const y = url ? 146 : 75;
-        doc.text(lines, 75, y, { align: "center", baseline: "bottom" });
+        doc.setFontSize(13);
+        doc.setTextColor(54, 42, 33);
+        if (url) {
+          // Fast tekstbånd i nederste sjettedel — altid samme placering på alle sider
+          doc.setFillColor(246, 239, 225);
+          doc.rect(0, 123, 150, 27, "F");
+          const lines = doc.splitTextToSize(text, 136) as string[];
+          const spacing = 5.6;
+          const bandCenter = 136.5;
+          const firstBaseline = bandCenter + ((lines.length - 1) * spacing) / 2;
+          doc.text(lines, 75, firstBaseline, { align: "center" });
+        } else {
+          const lines = doc.splitTextToSize(text, 126) as string[];
+          const firstBaseline = 75 + ((lines.length - 1) * 5.6) / 2;
+          doc.text(lines, 75, firstBaseline, { align: "center" });
+        }
       }
     }
   }

@@ -16,6 +16,13 @@ trykklar 15×15 cm PDF (Pixum softcover-format), direkte fra browseren.
 - **Ny bog** — indtast navn + alder, få 3 AI-forslag eller skriv selv,
   redigér hver sætning, og lad gpt-image-1 illustrere én side ad gangen eller
   hele bogen. Billederne kan tegnes igen enkeltvis.
+- **Billedkonsistens (v2.1)** — pr. bog bygges en *billedbibel* (hovedperson,
+  verden og fast palette) og et *personreference-ark*. Alle sidebilleder
+  genereres via gpt-image-1 edits med personarket som reference, så person,
+  baggrund, rekvisitter og farver er ens hele bogen igennem. Teksten placeres
+  altid i samme reserverede bånd i nederste sjettedel af siden (prompten
+  holder området roligt, PDF'en tegner båndet) — så placering og stavning er
+  garanteret korrekt på hver side.
 - **Dine data er dine** — egne bøger ligger i browserens IndexedDB; OpenAI-
   nøglen gemmes kun lokalt og sendes udelukkende til api.openai.com.
 
