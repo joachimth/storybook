@@ -81,7 +81,7 @@ ${sider.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 
 Build a visual bible that an illustrator can follow so EVERY page looks consistent:
 - characters: a plain JSON array of STRINGS (never objects, never nested structures). One string per character, with EVERY character in the story — the main child first, then ALL others that appear: friends, siblings, parents, animals, dragons, trolls, elves, witches, monsters, imaginary friends and other fantasy creatures. Include a character even if it appears on only ONE page, as long as it matters to the story. Each string: 1-2 sentences with the exact physical look — age, hair color and style, skin, clothes, shoes, accessories; for creatures and trolls: species, color, size, horns/teeth, friendly or scary look, clothing. Each must be identical on every page they appear.
-- world: the recurring setting(s) and the key props/objects that appear more than once, described so they keep the same shape and color every time.
+- world: the recurring setting(s), PLUS every important object/artifact the story depends on — suitcases, backpacks, bicycles, teddy bears, magic wands, keys, lanterns... Include an object even if it appears on only ONE page, as long as it matters to the story. Describe each prop with its exact shape and color so it is drawn identically on every page it appears.
 - palette: 5-6 specific colors (names) used throughout the entire book.
 
 JSON format: {"characters":["...","..."],"world":"...","palette":"..."}`,
@@ -140,7 +140,7 @@ export async function generateCharacterSheet(bible: StoryBible): Promise<Blob> {
   const prompt = `Children's picture book character reference sheet with MULTIPLE characters, ${STYLE}
 The full cast of the book, every character drawn full body, standing, front view, smiling, side by side in a row on a plain warm cream background:
 ${cast}
-Below the characters, the recurring props from the story, each drawn once, clearly and simply: ${bible.world}
+Below the characters, the important props and artifacts from the story (suitcase, backpack, bicycle, teddy bear, magic wand...), each drawn once with its exact shape and color: ${bible.world}
 Use exactly this palette throughout: ${bible.palette}`;
   const res = await fetch(`${API}/images/generations`, {
     method: "POST",

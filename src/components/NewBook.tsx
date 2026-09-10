@@ -411,10 +411,11 @@ export function NewBook({ onSaved, editing }: Props) {
           <h2>4 · Billedbibel{editing ? " (redigerer)" : ""}</h2>
           <p class="hint">
             Biblen låser ALLE karakterer i historien — også trolde, dyr og andre
-            fantasivæsner, selv de kun optræder på én side — plus verden og
-            palette. Cast-arket bruges som reference til alle illustrationer, så
-            alle figurer ser ens ud hele bogen igennem. Du kan rette, fjerne og
-            tilføje karakterer, eller tegne arket igen.
+            fantasivæsner — samt vigtige rekvisitter som kufferter, rygsække og
+            tryllestave, selv de kun optræder på én side. Cast-arket bruges som
+            reference til alle illustrationer, så alle figurer, ting og farver
+            ser ens ud hele bogen igennem. Du kan rette, fjerne og tilføje
+            karakterer, eller tegne arket igen.
           </p>
           {hasKey ? (
             <>
@@ -451,7 +452,7 @@ export function NewBook({ onSaved, editing }: Props) {
                     + Tilføj karakter
                   </button>
                   <div class="field">
-                    <label for="bib-world">Verden og tilbagevendende ting</label>
+                    <label for="bib-world">Verden og vigtige ting (kuffert, rygsæk, tryllestav …)</label>
                     <textarea id="bib-world" rows={2} value={bible.world}
                       onInput={(e) => setBible({ ...bible, world: (e.target as HTMLTextAreaElement).value })} />
                   </div>
