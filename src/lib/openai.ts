@@ -80,7 +80,7 @@ export async function buildStoryBible(titel: string, sider: string[]): Promise<S
 ${sider.map((s, i) => `${i + 1}. ${s}`).join("\n")}
 
 Build a visual bible that an illustrator can follow so EVERY page looks consistent:
-- characters: a plain JSON array of STRINGS (never objects, never nested structures). One string per recurring character, with EVERY recurring character in the story (the main child first, then everyone/anything that appears on more than one page: friends, siblings, animals, dragons, toys...). Each string: 1-2 sentences with the exact physical look (age, hair color and style, skin, clothes, shoes, accessories, and for creatures: color, size, friendly/scary look). Each must be identical on every page they appear.
+- characters: a plain JSON array of STRINGS (never objects, never nested structures). One string per character, with EVERY character in the story — the main child first, then ALL others that appear: friends, siblings, parents, animals, dragons, trolls, elves, witches, monsters, imaginary friends and other fantasy creatures. Include a character even if it appears on only ONE page, as long as it matters to the story. Each string: 1-2 sentences with the exact physical look — age, hair color and style, skin, clothes, shoes, accessories; for creatures and trolls: species, color, size, horns/teeth, friendly or scary look, clothing. Each must be identical on every page they appear.
 - world: the recurring setting(s) and the key props/objects that appear more than once, described so they keep the same shape and color every time.
 - palette: 5-6 specific colors (names) used throughout the entire book.
 

@@ -410,9 +410,11 @@ export function NewBook({ onSaved, editing }: Props) {
         <section class="panel">
           <h2>4 · Billedbibel{editing ? " (redigerer)" : ""}</h2>
           <p class="hint">
-            Biblen låser ALLE gennemgående karakterer, verden og palette fast, og cast-arket bruges som
-            reference til alle illustrationer — så alle figurer ser ens ud hele bogen igennem. Du kan
-            rette, fjerne og tilføje karakterer, eller tegne arket igen.
+            Biblen låser ALLE karakterer i historien — også trolde, dyr og andre
+            fantasivæsner, selv de kun optræder på én side — plus verden og
+            palette. Cast-arket bruges som reference til alle illustrationer, så
+            alle figurer ser ens ud hele bogen igennem. Du kan rette, fjerne og
+            tilføje karakterer, eller tegne arket igen.
           </p>
           {hasKey ? (
             <>
